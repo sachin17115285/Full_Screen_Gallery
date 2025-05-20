@@ -15,66 +15,60 @@ const mediaItems = [
   { type: 'video', uri: 'https://www.w3schools.com/html/mov_bbb.mp4' },
   { type: 'video', uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4' }];
 
-const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, isPlaying }: { 
+const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, isPlaying, videoRef }: { 
   uri: string;
   onStatusChange: (status: any) => void;
   onPlayPause: () => void;
   onMuteToggle: () => void;
   isMuted: boolean;
   isPlaying: boolean;
+  videoRef: React.RefObject<Video>;
 }) => {
-  const video = useRef<Video>(null);
-  const progressBarWidthRef = useRef(0);
+  return (
+    <View style={styles.videoContainer}>
+      <View style={styles.videoWrapper}>
+        <Video
+          ref={videoRef}
+          source={{ uri }}
+          style={styles.video}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={isPlaying}
+          isLooping={true}
+          isMuted={isMuted}
+          onPlaybackStatusUpdate={onStatusChange}
+          useNativeControls={false}
+          volume={1.0}
+        />
+        
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          onPress={onPlayPause}
+          activeOpacity={1}
+        />
+      </View>
+    </View>
+  );
+};
+
+export default function ImageZoomScreen() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const progressBarWidthRef = useRef(0);
+  const videoRef = useRef<Video>(null);
 
-  useEffect(() => {
-    const setupAudio = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          staysActiveInBackground: false,
-          interruptionModeIOS: 1,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          interruptionModeAndroid: 1,
-          playThroughEarpieceAndroid: false,
-        });
-      } catch (error) {
-        console.log('Error setting audio mode:', error);
-      }
-    };
-    
-    setupAudio();
-  }, []);
+  const goPrev = () => {
+    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
+  };
 
-  useEffect(() => {
-    if (video.current) {
-      if (isPlaying) {
-        video.current.playAsync().catch(error => {
-          console.log('Error playing video:', error);
-        });
-      } else {
-        video.current.pauseAsync().catch(error => {
-          console.log('Error pausing video:', error);
-        });
-      }
-    }
-  }, [isPlaying]);
+  const goNext = () => {
+    if (currentIndex < mediaItems.length - 1) setCurrentIndex(currentIndex + 1);
+  };
 
-  const handlePlaybackStatusUpdate = (status: any) => {
-    try {
-      if (status?.isLoaded) {
-        const roundedPosition = Math.round(status.positionMillis || 0);
-        const roundedDuration = Math.round(status.durationMillis || 0);
-        
-        setProgress(roundedPosition);
-        setDuration(roundedDuration);
-        onStatusChange(status);
-      }
-    } catch (error) {
-      console.log('Error updating playback status:', error);
-    }
+  const handlePlayPause = () => {
+    setIsPlaying(prev => !prev);
   };
 
   const handleSeek = async (event: any) => {
@@ -85,11 +79,10 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, 
       const boundedX = Math.max(0, Math.min(locationX, progressBarWidthRef.current));
       
       const percentage = Number((boundedX / progressBarWidthRef.current).toFixed(4));
-      
       const newPosition = Math.round(percentage * duration);
       
-      if (video.current) {
-        await video.current.setPositionAsync(newPosition);
+      if (videoRef.current) {
+        await videoRef.current.setPositionAsync(newPosition);
         setProgress(newPosition);
       }
     } catch (error) {
@@ -108,89 +101,14 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, 
     }
   };
 
-  return (
-    <View style={styles.videoContainer}>
-      <View style={styles.videoWrapper}>
-        <Video
-          ref={video}
-          source={{ uri }}
-          style={styles.video}
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={isPlaying}
-          isLooping={true}
-          isMuted={isMuted}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          useNativeControls={false}
-          volume={1.0}
-        />
-        
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          onPress={onPlayPause}
-          activeOpacity={1}
-        />
-      </View>
-
-      <View style={styles.controlsOverlay}>
-        <View style={styles.controls}>
-          <TouchableOpacity 
-            onPress={onPlayPause}
-            style={styles.controlButton}
-          >
-            <Text style={styles.controlText}>
-              {isPlaying ? '⏸️' : '▶️'}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={onMuteToggle}
-            style={styles.controlButton}
-          >
-            <Text style={styles.controlText}>
-              {isMuted ? '🔇' : '🔊'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity 
-          onPress={handleSeek}
-          onLayout={onProgressBarLayout}
-          style={styles.progressBarContainer}
-          activeOpacity={1}
-        >
-          <View style={styles.progressBarTouchArea}>
-            <View
-              style={[
-                styles.progressBar,
-                {
-                  width: duration > 0 
-                    ? `${Number(((progress / duration) * 100).toFixed(2))}%` 
-                    : '0%'
-                }
-              ]}
-            />
-          </View>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-
-export default function ImageZoomScreen() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
-
-  const goPrev = () => {
-    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
-  };
-
-  const goNext = () => {
-    if (currentIndex < mediaItems.length - 1) setCurrentIndex(currentIndex + 1);
-  };
-
-  const handlePlayPause = () => {
-    setIsPlaying(prev => !prev);
+  const handleStatusChange = (status: any) => {
+    if (status?.isLoaded) {
+      const roundedPosition = Math.round(status.positionMillis || 0);
+      const roundedDuration = Math.round(status.durationMillis || 0);
+      
+      setProgress(roundedPosition);
+      setDuration(roundedDuration);
+    }
   };
 
   const renderMedia = () => {
@@ -198,16 +116,61 @@ export default function ImageZoomScreen() {
     
     if (item.type === 'video') {
       return (
-        <Zoom style={styles.zoomContainer}>
-          <VideoPlayer 
-            uri={item.uri}
-            onStatusChange={() => {}}
-            onPlayPause={handlePlayPause}
-            onMuteToggle={() => setIsMuted(!isMuted)}
-            isMuted={isMuted}
-            isPlaying={isPlaying}
-          />
-        </Zoom>
+        <>
+          <Zoom style={styles.zoomContainer}>
+            <VideoPlayer 
+              uri={item.uri}
+              onStatusChange={handleStatusChange}
+              onPlayPause={handlePlayPause}
+              onMuteToggle={() => setIsMuted(!isMuted)}
+              isMuted={isMuted}
+              isPlaying={isPlaying}
+              videoRef={videoRef}
+            />
+          </Zoom>
+          {/* Controls outside of Zoom */}
+          <View style={styles.controlsOverlay}>
+            <View style={styles.controls}>
+              <TouchableOpacity 
+                onPress={handlePlayPause}
+                style={styles.controlButton}
+              >
+                <Text style={styles.controlText}>
+                  {isPlaying ? '⏸️' : '▶️'}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => setIsMuted(!isMuted)}
+                style={styles.controlButton}
+              >
+                <Text style={styles.controlText}>
+                  {isMuted ? '🔇' : '🔊'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              onPress={handleSeek}
+              onLayout={onProgressBarLayout}
+              style={styles.progressBarContainer}
+              activeOpacity={1}
+            >
+              <View style={styles.progressBarTouchArea}>
+                <View
+                  style={[
+                    styles.progressBar,
+                    {
+                      width: duration > 0 
+                        ? `${Number(((progress / duration) * 100).toFixed(2))}%` 
+                        : '0%'
+                    }
+                  ]}
+                />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </>
       );
     }
 
@@ -307,7 +270,7 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 0,
     right: 0,
-    zIndex: 9999, // Very high z-index to ensure it stays on top
+    zIndex: 9999,
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingVertical: 10,
   },
