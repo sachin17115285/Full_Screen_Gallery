@@ -24,6 +24,48 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, 
   isPlaying: boolean;
   videoRef: React.RefObject<Video>;
 }) => {
+  const lastTapRef = useRef(0);
+  const tapTimeoutRef = useRef<NodeJS.Timeout>();
+  const [showReplay, setShowReplay] = useState(false);
+
+  const handleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (lastTapRef.current && (now - lastTapRef.current) < DOUBLE_TAP_DELAY) {
+      clearTimeout(tapTimeoutRef.current);
+      lastTapRef.current = 0;
+      return;
+    } else {
+      lastTapRef.current = now;
+      tapTimeoutRef.current = setTimeout(() => {
+        if (!showReplay) {
+          onPlayPause();
+        }
+        lastTapRef.current = 0;
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+
+  const handleReplay = async () => {
+    if (videoRef.current) {
+      await videoRef.current.setPositionAsync(0);
+      onPlayPause();
+      setShowReplay(false);
+    }
+  };
+
+  const handlePlaybackStatusUpdate = (status: any) => {
+    if (status?.isLoaded) {
+      if (status.didJustFinish) {
+        setShowReplay(true);
+        onPlayPause(); // This will pause the video
+      }
+      // Pass the status to parent component for progress bar
+      onStatusChange(status);
+    }
+  };
+
   return (
     <View style={styles.videoContainer}>
       <View style={styles.videoWrapper}>
@@ -33,18 +75,27 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, 
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
           shouldPlay={isPlaying}
-          isLooping={true}
+          isLooping={false}
           isMuted={isMuted}
-          onPlaybackStatusUpdate={onStatusChange}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
           useNativeControls={false}
           volume={1.0}
         />
         
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
-          onPress={onPlayPause}
+          onPress={handleTap}
           activeOpacity={1}
         />
+
+        {showReplay && (
+          <TouchableOpacity 
+            style={styles.replayButton}
+            onPress={handleReplay}
+          >
+            <Text style={styles.replayText}>↺</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -309,5 +360,22 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#fff',
     borderRadius: 2,
+  },
+  replayButton: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -25 }, { translateY: -25 }],
+    width: 50,
+    height: 50,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  replayText: {
+    color: '#fff',
+    fontSize: 30,
   },
 }); 
