@@ -15,14 +15,18 @@ const mediaItems = [
   { type: 'video', uri: 'https://www.w3schools.com/html/mov_bbb.mp4' },
   { type: 'video', uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4' }];
 
-const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted }: { 
+const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted, isPlaying }: { 
   uri: string;
   onStatusChange: (status: any) => void;
   onPlayPause: () => void;
   onMuteToggle: () => void;
   isMuted: boolean;
+  isPlaying: boolean;
 }) => {
   const video = useRef<Video>(null);
+  const progressBarWidthRef = useRef(0);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   useEffect(() => {
     const setupAudio = async () => {
@@ -46,9 +50,63 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted }
 
   useEffect(() => {
     if (video.current) {
-      video.current.playAsync();
+      if (isPlaying) {
+        video.current.playAsync().catch(error => {
+          console.log('Error playing video:', error);
+        });
+      } else {
+        video.current.pauseAsync().catch(error => {
+          console.log('Error pausing video:', error);
+        });
+      }
     }
-  }, []);
+  }, [isPlaying]);
+
+  const handlePlaybackStatusUpdate = (status: any) => {
+    try {
+      if (status?.isLoaded) {
+        const roundedPosition = Math.round(status.positionMillis || 0);
+        const roundedDuration = Math.round(status.durationMillis || 0);
+        
+        setProgress(roundedPosition);
+        setDuration(roundedDuration);
+        onStatusChange(status);
+      }
+    } catch (error) {
+      console.log('Error updating playback status:', error);
+    }
+  };
+
+  const handleSeek = async (event: any) => {
+    try {
+      if (!progressBarWidthRef.current || !duration) return;
+
+      const { locationX } = event.nativeEvent;
+      const boundedX = Math.max(0, Math.min(locationX, progressBarWidthRef.current));
+      
+      const percentage = Number((boundedX / progressBarWidthRef.current).toFixed(4));
+      
+      const newPosition = Math.round(percentage * duration);
+      
+      if (video.current) {
+        await video.current.setPositionAsync(newPosition);
+        setProgress(newPosition);
+      }
+    } catch (error) {
+      console.log('Error seeking video:', error);
+    }
+  };
+
+  const onProgressBarLayout = (event: any) => {
+    try {
+      const { width } = event.nativeEvent.layout;
+      if (width) {
+        progressBarWidthRef.current = width;
+      }
+    } catch (error) {
+      console.log('Error setting progress bar width:', error);
+    }
+  };
 
   return (
     <View style={styles.videoContainer}>
@@ -58,10 +116,10 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted }
           source={{ uri }}
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={true}
+          shouldPlay={isPlaying}
           isLooping={true}
           isMuted={isMuted}
-          onPlaybackStatusUpdate={onStatusChange}
+          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
           useNativeControls={false}
           volume={1.0}
         />
@@ -72,15 +130,56 @@ const VideoPlayer = ({ uri, onStatusChange, onPlayPause, onMuteToggle, isMuted }
           activeOpacity={1}
         />
       </View>
+
+      <View style={styles.controlsOverlay}>
+        <View style={styles.controls}>
+          <TouchableOpacity 
+            onPress={onPlayPause}
+            style={styles.controlButton}
+          >
+            <Text style={styles.controlText}>
+              {isPlaying ? '⏸️' : '▶️'}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={onMuteToggle}
+            style={styles.controlButton}
+          >
+            <Text style={styles.controlText}>
+              {isMuted ? '🔇' : '🔊'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity 
+          onPress={handleSeek}
+          onLayout={onProgressBarLayout}
+          style={styles.progressBarContainer}
+          activeOpacity={1}
+        >
+          <View style={styles.progressBarTouchArea}>
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  width: duration > 0 
+                    ? `${Number(((progress / duration) * 100).toFixed(2))}%` 
+                    : '0%'
+                }
+              ]}
+            />
+          </View>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 export default function ImageZoomScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [status, setStatus] = useState<any>({});
   const [isMuted, setIsMuted] = useState(false);
-  const videoRef = useRef<Video>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
 
   const goPrev = () => {
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
@@ -90,18 +189,8 @@ export default function ImageZoomScreen() {
     if (currentIndex < mediaItems.length - 1) setCurrentIndex(currentIndex + 1);
   };
 
-  const handlePlayPause = async () => {
-    if (!videoRef.current) return;
-    
-    try {
-      if (status.isPlaying) {
-        await videoRef.current.pauseAsync();
-      } else {
-        await videoRef.current.playAsync();
-      }
-    } catch (error) {
-      console.log('Error playing/pausing video:', error);
-    }
+  const handlePlayPause = () => {
+    setIsPlaying(prev => !prev);
   };
 
   const renderMedia = () => {
@@ -109,52 +198,16 @@ export default function ImageZoomScreen() {
     
     if (item.type === 'video') {
       return (
-        <>
-          <Zoom style={styles.zoomContainer}>
-            <VideoPlayer 
-              uri={item.uri}
-              onStatusChange={setStatus}
-              onPlayPause={handlePlayPause}
-              onMuteToggle={() => setIsMuted(!isMuted)}
-              isMuted={isMuted}
-            />
-          </Zoom>
-          {/* Controls positioned absolutely relative to the screen */}
-          <View style={styles.controlsOverlay}>
-            <View style={styles.controls}>
-              <TouchableOpacity 
-                onPress={handlePlayPause}
-                style={styles.controlButton}
-              >
-                <Text style={styles.controlText}>
-                  {status?.isPlaying ? '⏸️' : '▶️'}
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                onPress={() => setIsMuted(!isMuted)}
-                style={styles.controlButton}
-              >
-                <Text style={styles.controlText}>
-                  {isMuted ? '🔇' : '🔊'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.progressBarContainer}>
-              <View
-                style={[
-                  styles.progressBar,
-                  {
-                    width: `${status?.positionMillis && status?.durationMillis
-                      ? (status.positionMillis / status.durationMillis) * 100
-                      : 0}%`
-                  }
-                ]}
-              />
-            </View>
-          </View>
-        </>
+        <Zoom style={styles.zoomContainer}>
+          <VideoPlayer 
+            uri={item.uri}
+            onStatusChange={() => {}}
+            onPlayPause={handlePlayPause}
+            onMuteToggle={() => setIsMuted(!isMuted)}
+            isMuted={isMuted}
+            isPlaying={isPlaying}
+          />
+        </Zoom>
       );
     }
 
@@ -277,10 +330,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
   },
   progressBarContainer: {
-    height: 4,
+    height: 6,
     backgroundColor: 'rgba(255,255,255,0.3)',
     marginHorizontal: 20,
-    borderRadius: 2,
+    borderRadius: 6,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  progressBarTouchArea: {
+    height: 4,
+    width: '100%',
+    position: 'relative',
   },
   progressBar: {
     height: '100%',
