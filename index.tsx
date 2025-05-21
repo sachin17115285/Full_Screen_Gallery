@@ -58,9 +58,9 @@ export function useZoomGesture(props: UseZoomGestureProps = {}): {
     doubleTapConfig,
   } = props
 
-  const baseScale = useSharedValue(1.2)
-  const pinchScale = useSharedValue(1.2)
-  const lastScale = useSharedValue(1.2)
+  const baseScale = useSharedValue(1)
+  const pinchScale = useSharedValue(1)
+  const lastScale = useSharedValue(1)
   const isZoomedIn = useSharedValue(false)
   const zoomGestureLastTime = useSharedValue(0)
 
